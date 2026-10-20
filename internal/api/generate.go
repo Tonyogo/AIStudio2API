@@ -17,7 +17,12 @@ import (
 var errIncompleteStream = errors.New("upstream stream closed before finish")
 var errUpstreamStream = errors.New("upstream stream error")
 
-const streamHeartbeatInterval = 10 * time.Second
+const (
+	// streamStartTimeout 是写出流式响应头前等待首个事件的时长
+	streamStartTimeout = 10 * time.Second
+	// streamHeartbeatInterval 是流式响应静默时发送保活心跳的间隔
+	streamHeartbeatInterval = 30 * time.Second
+)
 
 type generationResult struct {
 	events        []aistudio.Event
@@ -106,7 +111,7 @@ func (result *generationResult) apply(event aistudio.Event) error {
 
 // awaitStreamStart 在写出流式响应头前等待首个事件，首个事件为错误时返回该错误，心跳间隔内没有事件时直接返回原事件流
 func awaitStreamStart(ctx context.Context, events <-chan aistudio.Event) (<-chan aistudio.Event, error) {
-	timer := time.NewTimer(streamHeartbeatInterval)
+	timer := time.NewTimer(streamStartTimeout)
 	defer timer.Stop()
 	var first aistudio.Event
 	select {
@@ -205,8 +210,20 @@ func consumeEventsWithHeartbeat(
 					return result, err
 				}
 			}
-			resetHeartbeat()
+			if shouldResetHeartbeat(event) {
+				resetHeartbeat()
+			}
 		}
+	}
+}
+
+// shouldResetHeartbeat 判断事件是否属于流中途产生客户端输出的增量事件
+func shouldResetHeartbeat(event aistudio.Event) bool {
+	switch event.Kind {
+	case aistudio.EventUsage, aistudio.EventFinish, aistudio.EventGrounding, aistudio.EventCitation:
+		return false
+	default:
+		return true
 	}
 }
 

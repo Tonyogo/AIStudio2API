@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/Mag1cFall/AIStudio2API/internal/aistudio"
 )
@@ -210,5 +211,38 @@ func TestGeminiOutputParts_SignedAudio(t *testing.T) {
 	parts := geminiOutputParts(result)
 	if len(parts) != 2 || parts[0]["thoughtSignature"] != "audio-a" || parts[1]["thoughtSignature"] != "audio-b" {
 		t.Fatalf("signed audio=%+v", parts)
+	}
+}
+
+// TestStreamHeartbeatConstantsAndResetRule 验证首包等待、心跳间隔常量与心跳重置规则
+func TestStreamHeartbeatConstantsAndResetRule(t *testing.T) {
+	if streamStartTimeout != 10*time.Second {
+		t.Fatalf("streamStartTimeout = %v, want 10s", streamStartTimeout)
+	}
+	if streamHeartbeatInterval != 30*time.Second {
+		t.Fatalf("streamHeartbeatInterval = %v, want 30s", streamHeartbeatInterval)
+	}
+	for _, kind := range []aistudio.EventKind{
+		aistudio.EventText,
+		aistudio.EventReasoning,
+		aistudio.EventToolCall,
+		aistudio.EventExecutableCode,
+		aistudio.EventCodeExecutionResult,
+		aistudio.EventMedia,
+		aistudio.EventThoughtSignature,
+	} {
+		if !shouldResetHeartbeat(aistudio.Event{Kind: kind}) {
+			t.Errorf("shouldResetHeartbeat(%s) = false, want true", kind)
+		}
+	}
+	for _, kind := range []aistudio.EventKind{
+		aistudio.EventUsage,
+		aistudio.EventFinish,
+		aistudio.EventGrounding,
+		aistudio.EventCitation,
+	} {
+		if shouldResetHeartbeat(aistudio.Event{Kind: kind}) {
+			t.Errorf("shouldResetHeartbeat(%s) = true, want false", kind)
+		}
 	}
 }
