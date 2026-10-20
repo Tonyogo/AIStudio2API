@@ -31,7 +31,7 @@
   - `const streamHeartbeatInterval = 30 * time.Second` (`internal/api/generate.go`)
   - `func shouldResetHeartbeat(event aistudio.Event) bool` (`internal/api/generate.go`)
 
-- [ ] **Step 1: 在 `internal/api/gemini_output_test.go` 末尾编写失败测试**
+- [x] **Step 1: 在 `internal/api/gemini_output_test.go` 末尾编写失败测试**
 
 在 `internal/api/gemini_output_test.go` 末尾追加以下测试函数（需在 import 中引入 `"time"`）：
 
@@ -70,12 +70,12 @@ func TestStreamHeartbeatConstantsAndResetRule(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: 运行测试确认其失败**
+- [x] **Step 2: 运行测试确认其失败**
 
 Run: `go test ./internal/api -run TestStreamHeartbeatConstantsAndResetRule -v`
 Expected: FAIL with `undefined: streamStartTimeout` and `undefined: shouldResetHeartbeat`
 
-- [ ] **Step 3: 在 `internal/api/generate.go` 中实现常量拆分与 `shouldResetHeartbeat`**
+- [x] **Step 3: 在 `internal/api/generate.go` 中实现常量拆分与 `shouldResetHeartbeat`**
 
 修改 `internal/api/generate.go`：
 
@@ -121,12 +121,12 @@ func shouldResetHeartbeat(event aistudio.Event) bool {
 }
 ```
 
-- [ ] **Step 4: 运行测试确认其通过**
+- [x] **Step 4: 运行测试确认其通过**
 
 Run: `go test ./internal/api -run TestStreamHeartbeatConstantsAndResetRule -v`
 Expected: PASS
 
-- [ ] **Step 5: 提交 Task 1**
+- [x] **Step 5: 提交 Task 1**
 
 ```bash
 git add internal/api/generate.go internal/api/gemini_output_test.go
@@ -153,7 +153,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
   - `geminiStream` 结构体的 `lastWrite time.Time` 字段与��流后的 `heartbeat() error` (`internal/api/gemini.go`)
   - `streamChatCompletion` 中的 `lastWrite time.Time` 心跳节流 (`internal/api/openai.go`)
 
-- [ ] **Step 1: 在 `internal/api/gemini_output_test.go` 末尾编写失败测试**
+- [x] **Step 1: 在 `internal/api/gemini_output_test.go` 末尾编写失败测试**
 
 在 `internal/api/gemini_output_test.go` 的 `import` 中补充 `"net/http"` 与 `"net/http/httptest"`，并在文件末尾添加以下测试：
 
@@ -213,12 +213,12 @@ func TestGeminiStreamHeartbeatSSEAndJSON(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: 运行测试确认其失败**
+- [x] **Step 2: 运行测试确认其失败**
 
 Run: `go test ./internal/api -run TestGeminiStreamHeartbeatSSEAndJSON -v`
 Expected: FAIL with `stream.lastWrite undefined (type *geminiStream has no field or method lastWrite)`
 
-- [ ] **Step 3: 修改 `internal/api/errors.go`、`internal/api/gemini.go` 与 `internal/api/openai.go`**
+- [x] **Step 3: 修改 `internal/api/errors.go`、`internal/api/gemini.go` 与 `internal/api/openai.go`**
 
 1. 在 `internal/api/errors.go` 中删除 `writeGeminiHeartbeat`（第 82-88 行），保留 `writeSSEHeartbeat`：
 ```go
@@ -334,12 +334,12 @@ func (stream *geminiStream) heartbeat() error {
 	}
 ```
 
-- [ ] **Step 4: 运行全部测试确认通过**
+- [x] **Step 4: 运行全部测试确认通过**
 
 Run: `go test ./internal/api/... -v`
 Expected: PASS
 
-- [ ] **Step 5: 提交 Task 2**
+- [x] **Step 5: 提交 Task 2**
 
 ```bash
 git add internal/api/errors.go internal/api/gemini.go internal/api/openai.go internal/api/gemini_output_test.go
