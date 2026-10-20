@@ -948,10 +948,15 @@ func (s *server) streamChatCompletion(w http.ResponseWriter, r *http.Request, re
 		return
 	}
 	var writing sync.Mutex
+	lastWrite := time.Now()
 	write := func(index int, delta map[string]any, finish *string) error {
 		writing.Lock()
 		defer writing.Unlock()
-		return writeChatChunk(w, id, created, request.Model, index, delta, finish, request.StreamOptions.IncludeUsage)
+		err := writeChatChunk(w, id, created, request.Model, index, delta, finish, request.StreamOptions.IncludeUsage)
+		if err == nil {
+			lastWrite = time.Now()
+		}
+		return err
 	}
 	for index := range choices.events {
 		if err := write(index, map[string]any{"role": "assistant", "content": ""}, nil); err != nil {
@@ -961,7 +966,14 @@ func (s *server) streamChatCompletion(w http.ResponseWriter, r *http.Request, re
 	heartbeat := func() error {
 		writing.Lock()
 		defer writing.Unlock()
-		return writeSSEHeartbeat(w)
+		if time.Since(lastWrite) < streamHeartbeatInterval {
+			return nil
+		}
+		err := writeSSEHeartbeat(w)
+		if err == nil {
+			lastWrite = time.Now()
+		}
+		return err
 	}
 	results, err := choices.run(func(index int, events <-chan aistudio.Event) (generationResult, error) {
 		choice := &chatStreamChoice{server: s, tools: request.Tools, index: index, write: write}

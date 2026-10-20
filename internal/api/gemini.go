@@ -1363,15 +1363,16 @@ func geminiUsage(usage *aistudio.Usage) map[string]any {
 
 // geminiStream 写出 streamGenerateContent 的响应块：alt=sse 时为 SSE，否则与官方 REST 一样为逐个对象写出的 JSON 数组
 type geminiStream struct {
-	w       http.ResponseWriter
-	sse     bool
-	mu      sync.Mutex
-	written bool
+	w         http.ResponseWriter
+	sse       bool
+	mu        sync.Mutex
+	written   bool
+	lastWrite time.Time
 }
 
 // openGeminiStream 按 alt 参数写出流式响应头
 func openGeminiStream(w http.ResponseWriter, r *http.Request) (*geminiStream, error) {
-	stream := &geminiStream{w: w, sse: r.URL.Query().Get("alt") == "sse"}
+	stream := &geminiStream{w: w, sse: r.URL.Query().Get("alt") == "sse", lastWrite: time.Now()}
 	if stream.sse {
 		return stream, streamHeaders(w)
 	}
@@ -1386,7 +1387,11 @@ func (stream *geminiStream) write(value map[string]any) error {
 	stream.mu.Lock()
 	defer stream.mu.Unlock()
 	if stream.sse {
-		return writeSSE(stream.w, "", value)
+		err := writeSSE(stream.w, "", value)
+		if err == nil {
+			stream.lastWrite = time.Now()
+		}
+		return err
 	}
 	data, err := json.Marshal(value)
 	if err != nil {
@@ -1400,17 +1405,28 @@ func (stream *geminiStream) write(value map[string]any) error {
 	if _, err := io.WriteString(stream.w, prefix+string(data)); err != nil {
 		return err
 	}
-	return http.NewResponseController(stream.w).Flush()
+	err = http.NewResponseController(stream.w).Flush()
+	if err == nil {
+		stream.lastWrite = time.Now()
+	}
+	return err
 }
 
-// heartbeat 在 SSE 流静默时写出空行，JSON 数组不写
+// heartbeat 在 SSE 流静默达到心跳间隔时写出注释帧，JSON 数组不写
 func (stream *geminiStream) heartbeat() error {
 	if !stream.sse {
 		return nil
 	}
 	stream.mu.Lock()
 	defer stream.mu.Unlock()
-	return writeGeminiHeartbeat(stream.w)
+	if !stream.lastWrite.IsZero() && time.Since(stream.lastWrite) < streamHeartbeatInterval {
+		return nil
+	}
+	err := writeSSEHeartbeat(stream.w)
+	if err == nil {
+		stream.lastWrite = time.Now()
+	}
+	return err
 }
 
 // close 结束 JSON 数组

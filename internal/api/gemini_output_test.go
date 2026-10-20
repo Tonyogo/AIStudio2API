@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
 	"time"
@@ -245,4 +247,58 @@ func TestStreamHeartbeatConstantsAndResetRule(t *testing.T) {
 			t.Errorf("shouldResetHeartbeat(%s) = true, want false", kind)
 		}
 	}
+}
+
+// TestGeminiStreamHeartbeatSSEAndJSON 验证 Gemini 流在 alt=sse 下发送标准注释帧且多候选节流，JSON 数组模式下不发送
+func TestGeminiStreamHeartbeatSSEAndJSON(t *testing.T) {
+	t.Run("alt=sse writes standard SSE comment and throttles concurrent heartbeats", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse", nil)
+		rec := httptest.NewRecorder()
+		stream, err := openGeminiStream(rec, req)
+		if err != nil {
+			t.Fatalf("openGeminiStream failed: %v", err)
+		}
+
+		// 刚打开流时距离 lastWrite 未满 streamHeartbeatInterval，首次并发调用应被节流跳过
+		if err := stream.heartbeat(); err != nil {
+			t.Fatalf("throttled heartbeat failed: %v", err)
+		}
+		if got := rec.Body.String(); got != "" {
+			t.Fatalf("expected empty body when throttled, got %q", got)
+		}
+
+		// 模拟静默已达 streamHeartbeatInterval
+		stream.lastWrite = time.Now().Add(-streamHeartbeatInterval)
+		if err := stream.heartbeat(); err != nil {
+			t.Fatalf("heartbeat failed: %v", err)
+		}
+		if got := rec.Body.String(); got != ": ping\n\n" {
+			t.Fatalf("body = %q, want %q", got, ": ping\n\n")
+		}
+
+		// 紧随其后的第二个候选协程心跳应被节流，不再重复写出
+		if err := stream.heartbeat(); err != nil {
+			t.Fatalf("second candidate heartbeat failed: %v", err)
+		}
+		if got := rec.Body.String(); got != ": ping\n\n" {
+			t.Fatalf("body after second heartbeat = %q, want single %q", got, ": ping\n\n")
+		}
+	})
+
+	t.Run("json array stream does not write heartbeat", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-pro:streamGenerateContent", nil)
+		rec := httptest.NewRecorder()
+		stream, err := openGeminiStream(rec, req)
+		if err != nil {
+			t.Fatalf("openGeminiStream failed: %v", err)
+		}
+		stream.lastWrite = time.Now().Add(-streamHeartbeatInterval)
+		if err := stream.heartbeat(); err != nil {
+			t.Fatalf("heartbeat failed: %v", err)
+		}
+		stream.close()
+		if got := rec.Body.String(); got != "[]" {
+			t.Fatalf("json stream body = %q, want %q", got, "[]")
+		}
+	})
 }
